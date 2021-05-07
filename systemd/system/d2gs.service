@@ -1,0 +1,17 @@
+[Unit]
+Description=d2gs
+After=network.target
+StartLimitIntervalSec=0
+[Service]
+Type=simple
+Restart=always
+RestartSec=2
+User=user
+Group=user
+WorkingDirectory=/home/user/d2gs
+KillMode=process
+TimeoutStopSec=330
+ExecStart=/home/user/d2gs/hookd2gs -pf .pw
+
+[Install]
+WantedBy=multi-user.target
