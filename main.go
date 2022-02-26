@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -23,6 +24,8 @@ var (
 	Password         string
 	PasswordFileFlag = flag.String("pf", "", "path to file containing d2gs admin password (for telnet)")
 	PasswordFile     string
+
+	lastRestart time.Time
 )
 
 // TODO don't rely on bash
@@ -109,7 +112,7 @@ func dieEarly() {
 	time.Sleep(time.Second * 7)
 }
 
-func sendRestartSignal(fail bool) {
+func sendRestartSignal(fail bool, mins int) {
 	conn, err := telnet.DialTo(Host)
 	if err != nil {
 		log.Fatalln(err)
@@ -118,17 +121,17 @@ func sendRestartSignal(fail bool) {
 	time.Sleep(time.Second)
 	if fail {
 		log.Println("Restarting d2gs due to error.")
-		conn.Write([]byte(`msg sys #all "[server] I have encountered an error which is preventing people from creating new games."` + "\n"))
+		conn.Write([]byte(`msg sys #all "[server] I have encountered a serious error which has broken the game server."` + "\n"))
 	} else {
 		log.Println("Restarting d2gs as instructed.")
-		conn.Write([]byte(`msg sys #all "[server] I've been ordered to restart, so I must do so."` + "\n"))
+		conn.Write([]byte(`msg sys #all "[server] I've been ordered to restart, so I must do so (probably maintenance)."` + "\n"))
 	}
 	time.Sleep(time.Millisecond * 200)
-	conn.Write([]byte(`msg sys #all "[server] I will restart in 5mins, so please save and quit at your earliest convenience,"` + "\n"))
+	conn.Write([]byte(fmt.Sprintf(`msg sys #all "[server] I will restart in %dmins, or when everyone disconnects so please save and quit"` + "\n", mins)))
 	time.Sleep(time.Millisecond * 200)
-	conn.Write([]byte(`msg sys #all "[server] and rejoin after the restart :)"` + "\n"))
+	conn.Write([]byte(`msg sys #all "[server] at your earliest convenience, and rejoin after the restart :)"` + "\n"))
 	time.Sleep(time.Millisecond * 200)
-	conn.Write([]byte("restart 300\n"))
+	conn.Write([]byte(fmt.Sprintf("restart %d\n", mins*60)))
 
 	conn.Close()
 	go dieEarly() // watch if all players leave, then restart immediately
@@ -145,7 +148,7 @@ func readPipe(pipe io.ReadCloser) {
 		log.Printf("%s", line)
 		if !dead && strings.HasPrefix(line, "err") {
 			dead = true
-			sendRestartSignal(true)
+			sendRestartSignal(true, 1)
 		}
 	}
 }
@@ -177,10 +180,22 @@ func main() {
 	go func() {
 		<-sigs
 		dead = true
-		sendRestartSignal(false)
+		sendRestartSignal(false, 5)
+	}()
+
+	go func() {
+		lastRestart = time.Now()
+		for !dead {
+			if time.Since(lastRestart) > time.Hour*24 {
+				sendRestartSignal(false, 60)
+				lastRestart = time.Now()
+			}
+			time.Sleep(time.Minute)
+		}
 	}()
 
 	for !dead {
+		lastRestart = time.Now()
 		stdout, stderr, done := runCommand("wine D2GS.exe")
 		go readPipe(stdout)
 		go readPipe(stderr)
