@@ -67,14 +67,17 @@ func runCommand(command string) (stdout, stderr io.ReadCloser, done chan bool) {
 }
 
 // I was having trouble getting the telnet lib to cooperate with the stdlib utils so I made this janky function
-func readTelnetLine(reader io.Reader) string {
+func readTelnetLine(reader io.Reader) (string, error) {
 	lineb := make([]byte, 0)
 	oneByte := make([]byte, 1)
 	for oneByte[0] != '\n' {
-		reader.Read(oneByte)
+		_, err := reader.Read(oneByte)
+		if err != nil {
+			return "", err
+		}
 		lineb = append(lineb, oneByte[0])
 	}
-	return string(lineb)
+	return string(lineb), nil
 }
 
 // triggered by sendRestartSignal
@@ -91,7 +94,12 @@ func dieEarly() {
 	for users > 0 {
 		conn.Write([]byte("status\n"))
 		for {
-			line := readTelnetLine(conn)
+			line, err := readTelnetLine(conn)
+			if err != nil {
+				log.Println("[DEBUG]", err)
+				conn.Close()
+				return
+			}
 			if strings.HasPrefix(line, CURRENT_USERS_IN_GAME) {
 				userc, err := strconv.Atoi(line[len(CURRENT_USERS_IN_GAME) : len(line)-2])
 				if err != nil {
@@ -127,7 +135,7 @@ func sendRestartSignal(fail bool, mins int) {
 		conn.Write([]byte(`msg sys #all "[server] I've been ordered to restart, so I must do so (probably maintenance)."` + "\n"))
 	}
 	time.Sleep(time.Millisecond * 200)
-	conn.Write([]byte(fmt.Sprintf(`msg sys #all "[server] I will restart in %dmins, or when everyone disconnects so please save and quit"` + "\n", mins)))
+	conn.Write([]byte(fmt.Sprintf(`msg sys #all "[server] I will restart in %dmins, or when everyone disconnects so please save and quit"`+"\n", mins)))
 	time.Sleep(time.Millisecond * 200)
 	conn.Write([]byte(`msg sys #all "[server] at your earliest convenience, and rejoin after the restart :)"` + "\n"))
 	time.Sleep(time.Millisecond * 200)
@@ -160,7 +168,7 @@ func main() {
 	Password = *PasswordFlag
 	PasswordFile = *PasswordFileFlag
 
-	if Password == ""  && PasswordFile == "" {
+	if Password == "" && PasswordFile == "" {
 		log.Println("Either -p or -pf must be set.")
 		flag.PrintDefaults()
 		return
