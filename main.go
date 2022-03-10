@@ -88,11 +88,11 @@ func dieEarly() {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	conn.Write([]byte(Password + "\n"))
+	strings.NewReader(Password + "\n").WriteTo(conn)
 	time.Sleep(time.Millisecond * 200)
 	users := 1
 	for users > 0 {
-		conn.Write([]byte("status\n"))
+		strings.NewReader("status\n").WriteTo(conn)
 		for {
 			line, err := readTelnetLine(conn)
 			if err != nil {
@@ -114,7 +114,7 @@ func dieEarly() {
 		time.Sleep(time.Second * 3)
 	}
 	log.Println("[DEBUG] No users online, rebooting early.")
-	conn.Write([]byte("restart 1\n"))
+	strings.NewReader("restart 1\n").WriteTo(conn)
 	time.Sleep(time.Millisecond * 200)
 	conn.Close()
 	time.Sleep(time.Second * 7)
@@ -125,21 +125,21 @@ func sendRestartSignal(fail bool, mins int) {
 	if err != nil {
 		log.Fatalln(err)
 	}
-	conn.Write([]byte(Password + "\n"))
+	strings.NewReader(Password + "\n").WriteTo(conn)
 	time.Sleep(time.Second)
 	if fail {
 		log.Println("Restarting d2gs due to error.")
-		conn.Write([]byte(`msg sys #all "[server] I have encountered a serious error which has broken the game server."` + "\n"))
+		strings.NewReader(`msg sys #all "[server] I have encountered a serious error which has broken the game server."` + "\n").WriteTo(conn)
 	} else {
 		log.Println("Restarting d2gs as instructed.")
-		conn.Write([]byte(`msg sys #all "[server] I've been ordered to restart, so I must do so (probably maintenance)."` + "\n"))
+		strings.NewReader(`msg sys #all "[server] I've been ordered to restart, so I must do so (probably maintenance)."` + "\n").WriteTo(conn)
 	}
 	time.Sleep(time.Millisecond * 200)
-	conn.Write([]byte(fmt.Sprintf(`msg sys #all "[server] I will restart in %dmins, or when everyone disconnects so please save and quit"`+"\n", mins)))
+	strings.NewReader(fmt.Sprintf(`msg sys #all "[server] I will restart in %dmins, or when everyone disconnects so please save and quit"`+"\n", mins)).WriteTo(conn)
 	time.Sleep(time.Millisecond * 200)
-	conn.Write([]byte(`msg sys #all "[server] at your earliest convenience, and rejoin after the restart :)"` + "\n"))
+	strings.NewReader(`msg sys #all "[server] at your earliest convenience, and rejoin after the restart :)"` + "\n").WriteTo(conn)
 	time.Sleep(time.Millisecond * 200)
-	conn.Write([]byte(fmt.Sprintf("restart %d\n", mins*60)))
+	strings.NewReader(fmt.Sprintf("restart %d\n", mins*60)).WriteTo(conn)
 
 	conn.Close()
 	go dieEarly() // watch if all players leave, then restart immediately
